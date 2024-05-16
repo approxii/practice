@@ -1,2 +1,2 @@
 # practice
-micorosoft documets generate/analyze
+analyze of microsoft office documents with .pptx extension
