@@ -1,2 +1,2 @@
 # practice
-micorosoft documets generate/analyze
+generating microsoft office documents with .xlsx extension
