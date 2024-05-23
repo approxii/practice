@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "excel generate"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+pandas = "^2.2.1"
+fastapi = "^0.110.0"
+python-dotenv = "^1.0.1"
+pydantic-settings = "^2.2.1"
+uvicorn = "^0.28.0"
+python-multipart = "^0.0.9"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
