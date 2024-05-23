@@ -5,11 +5,11 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import Response
 
-from core.api.router.excel.depends import get_service
+from core.api.router.word.depends import get_service
 from core.services.conveter import DataConverter
-from core.services.excel import ExcelService as Service
+from core.services.word import WordService as Service
 
-router = APIRouter(prefix="/excel")
+router = APIRouter(prefix="/word")
 
 
 @router.post("/update/")
@@ -19,7 +19,7 @@ async def upload_file_and_dict(
     service: Service = Depends(get_service),
 ):
     """
-    Принимает таблицу и словарь в теле запроса, возвращает новую таблицу.
+    Принимает документ и словарь в теле запроса, возвращает новый документ.
     """
     contents = await file.read()
     service.load(BytesIO(contents))
@@ -30,6 +30,8 @@ async def upload_file_and_dict(
     headers = {
         "Content-Disposition": f"attachment; filename*=utf-8''{filename}",
     }
-    media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    media_type = (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
 
     return Response(content=new_file.getvalue(), headers=headers, media_type=media_type)
