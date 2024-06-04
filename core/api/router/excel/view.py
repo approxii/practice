@@ -13,7 +13,7 @@ router = APIRouter(prefix="/excel")
 
 
 @router.post("/update/")
-async def upload_file_and_dict(
+async def excel_generate(
     file: UploadFile = File(...),
     dictionary: Dict[str, Any] = Depends(DataConverter()),
     service: Service = Depends(get_service),
