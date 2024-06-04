@@ -13,7 +13,7 @@ router = APIRouter(prefix="/word")
 
 
 @router.post("/update/")
-async def upload_file_and_dict(
+async def word_generate(
     file: UploadFile = File(...),
     dictionary: Dict[str, Any] = Depends(DataConverter()),
     service: Service = Depends(get_service),

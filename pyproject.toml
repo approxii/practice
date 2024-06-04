@@ -76,7 +76,9 @@ mypy-extensions = "1.0.0"
 pathspec = "0.12.1"
 pillow = "10.3.0"
 yarl = "1.9.4"
-python-docx = "^1.1.2"
+python-docx = "1.1.2"
+python-pptx = "0.6.23"
+xlsxwriter = "3.2.0"
 
 
 [build-system]
