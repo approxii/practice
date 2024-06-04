@@ -1,4 +1,7 @@
 from io import BytesIO
+import json
+import os
+from itertools import groupby
 
 from pptx import Presentation
 from pptx.util import Inches
@@ -6,7 +9,7 @@ from pptx.util import Inches
 from core.services.base import BaseDocumentService
 
 
-class PowerpointService(BaseDocumentService):
+class PowerpointGenerateService(BaseDocumentService):
     def __init__(self):
         self.presentation = None
 
@@ -64,14 +67,9 @@ class PowerpointService(BaseDocumentService):
             raise ValueError("PPTX файл не загружен")
 
 
-import json
-import os
-from itertools import groupby
-
-from pptx import Presentation
 
 
-class PowerPointService:
+class PowerpointAnalyzeService:
     def __init__(self):
         self.ppt = None
         self.list_of_notes = []
@@ -99,8 +97,8 @@ class PowerPointService:
             el for el, _ in groupby(self.list_of_notes_address)
         ]
 
-        notes = PowerPointService.get_text_from_slides(self.ppt)
-        PowerPointService.merging_lists(
+        notes = PowerpointAnalyzeService.get_text_from_slides(self.ppt)
+        PowerpointAnalyzeService.merging_lists(
             new_list_of_notes_address, notes, self.list_of_notes
         )
         # PowerPointService.save_to_json(list_of_notes)
@@ -114,7 +112,7 @@ class PowerPointService:
             for shape in slide.shapes:
                 if shape.has_text_frame and shape.text.strip():
                     temp.append(shape.text)
-            temp = PowerPointService.check_slash_n(temp)
+            temp = PowerpointAnalyzeService.check_slash_n(temp)
             notes.append(temp)
         return notes
 

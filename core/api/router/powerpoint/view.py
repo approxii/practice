@@ -16,7 +16,7 @@ router = APIRouter(prefix="/powerpoint")
 
 
 @router.post("/analyze/")
-async def word_analyze(
+async def powerpoint_analyze(
     file: UploadFile = File(...),
     service: AnalyzeService = Depends(get_analyze_service),
 ):
@@ -28,7 +28,7 @@ async def word_analyze(
 
 
 @router.post("/update/")
-async def word_generate(
+async def powerpoint_generate(
     file: UploadFile = File(...),
     dictionary: Dict[str, Any] = Depends(DataConverter()),
     service: GenerateService = Depends(get_generate_service),
