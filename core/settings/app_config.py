@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     APP_PORT: int = 8000
     AUTH_HOST: str = "https://vega.mirea.ru/"
     AUTH_URL: str = AUTH_HOST + "authservice.php?op=parsetoken&token="
-    ROOT_PATH: str = "/practice-bunduki"
+    ROOT_PATH: str = "/officesvc"
 
 
 settings = Settings()
