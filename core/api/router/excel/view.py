@@ -2,7 +2,7 @@ from io import BytesIO
 from typing import Any, Dict
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, UploadFile, Form, HTTPException
 from fastapi.responses import Response
 
 from core.api.router.excel.depends import get_service
@@ -33,3 +33,19 @@ async def excel_generate(
     media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
     return Response(content=new_file.getvalue(), headers=headers, media_type=media_type)
+
+@router.post("/get_as_json")
+async def excel_as_json(    
+    file: UploadFile = File(...),
+    sheet_name: str = Form(None), 
+    range: str = Form(None),
+    service: Service = Depends(get_service),):
+    """
+    Получение значений таблицы в JSON.
+    """
+    try:
+        contents = await file.read()
+        service.load(BytesIO(contents))
+        return service.to_json(sheet_name=sheet_name, range=range)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
