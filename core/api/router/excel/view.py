@@ -2,7 +2,7 @@ from io import BytesIO
 from typing import Any, Dict
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, UploadFile, Form, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 
 from core.api.router.excel.depends import get_service
@@ -34,12 +34,14 @@ async def excel_generate(
 
     return Response(content=new_file.getvalue(), headers=headers, media_type=media_type)
 
+
 @router.post("/get_as_json")
-async def excel_as_json(    
+async def excel_as_json(
     file: UploadFile = File(...),
-    sheet_name: str = Form(None), 
+    sheet_name: str = Form(None),
     range: str = Form(None),
-    service: Service = Depends(get_service),):
+    service: Service = Depends(get_service),
+):
     """
     Получение значений таблицы в JSON.
     """

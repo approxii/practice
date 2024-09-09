@@ -47,27 +47,30 @@ class ExcelService(BaseDocumentService):
                                         ].value = item
                             else:
                                 start_cell.value = value
-    def to_json(self, sheet_name:str = None,  range: str = None):
+
+    def to_json(self, sheet_name: str = None, range: str = None):
         if not self.workbook:
             raise ValueError("Excel файл не загружен.")
         sheets = self.workbook.worksheets
         if sheet_name and sheet_name in self.workbook.sheetnames:
             sheets = [self.workbook[sheet_name]]
-        
+
         data = {}
 
         for sheet in sheets:
             base_range = f"A1:{get_column_letter(sheet.max_column)}{sheet.max_row}"
             if range:
-                base_range=range
+                base_range = range
+            sheet_data = {}
             cells_range = sheet[base_range]
             for row in cells_range:
                 for cell in row:
                     if cell.value:
                         cell_letter = get_column_letter(cell.column)
-                        cell_address = f"{sheet.title}!{cell_letter}{cell.row}"
-                        data[cell_address] = cell.value
-
+                        cell_address = f"{cell_letter}{cell.row}"
+                        sheet_data[cell_address] = cell.value
+            if sheet_data:
+                data[sheet.title] = sheet_data
         return data
 
     def save_to_bytes(self) -> BytesIO:
