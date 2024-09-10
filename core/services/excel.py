@@ -1,7 +1,7 @@
 from io import BytesIO
 
-from openpyxl import load_workbook
-from openpyxl.utils import get_column_letter
+from openpyxl import load_workbook,Workbook
+from openpyxl.utils import get_column_letter, column_index_from_string
 
 from core.services.base import BaseDocumentService
 
@@ -48,7 +48,7 @@ class ExcelService(BaseDocumentService):
                             else:
                                 start_cell.value = value
 
-    def to_json(self, sheet_name: str = None, range: str = None):
+    def to_json(self, sheet_name: str = None, range: str = None) -> dict:
         if not self.workbook:
             raise ValueError("Excel файл не загружен.")
         sheets = self.workbook.worksheets
@@ -72,6 +72,30 @@ class ExcelService(BaseDocumentService):
             if sheet_data:
                 data[sheet.title] = sheet_data
         return data
+
+    def from_json(self, data: dict) ->None:
+        if not self.workbook:
+            raise ValueError("Excel файл не загружен.")
+
+        for sheet_name, sheet_data in data.items():
+            if sheet_name in self.workbook.sheetnames:
+                sheet = self.workbook[sheet_name]
+            else:
+                sheet = self.workbook.create_sheet(sheet_name)
+
+            for cell_address, value in sheet_data.items():
+                try:
+                    col_letter = ''.join([char for char in cell_address if char.isalpha()])
+                    row_number = int(''.join([char for char in cell_address if char.isdigit()]))
+                    col_idx = column_index_from_string(col_letter)
+                    
+                    if row_number < 1 or col_idx < 1:
+                        raise ValueError(f"Некорректный адрес ячейки: {cell_address}.")
+                    
+                    sheet[cell_address] = value
+                except Exception as e:
+                    raise ValueError(f"Ошибка при обработке ячейки {cell_address}: {e}")
+
 
     def save_to_bytes(self) -> BytesIO:
         if not self.workbook:
