@@ -1,7 +1,8 @@
+from copy import deepcopy
 from io import BytesIO
 
-from openpyxl import load_workbook,Workbook
-from openpyxl.utils import get_column_letter, column_index_from_string
+from openpyxl import Workbook, load_workbook
+from openpyxl.utils import column_index_from_string, get_column_letter
 
 from core.services.base import BaseDocumentService
 
@@ -73,7 +74,7 @@ class ExcelService(BaseDocumentService):
                 data[sheet.title] = sheet_data
         return data
 
-    def from_json(self, data: dict) ->None:
+    def from_json(self, data: dict) -> None:
         if not self.workbook:
             raise ValueError("Excel файл не загружен.")
 
@@ -85,17 +86,77 @@ class ExcelService(BaseDocumentService):
 
             for cell_address, value in sheet_data.items():
                 try:
-                    col_letter = ''.join([char for char in cell_address if char.isalpha()])
-                    row_number = int(''.join([char for char in cell_address if char.isdigit()]))
+                    col_letter = "".join(
+                        [char for char in cell_address if char.isalpha()]
+                    )
+                    row_number = int(
+                        "".join([char for char in cell_address if char.isdigit()])
+                    )
                     col_idx = column_index_from_string(col_letter)
-                    
+
                     if row_number < 1 or col_idx < 1:
                         raise ValueError(f"Некорректный адрес ячейки: {cell_address}.")
-                    
+
                     sheet[cell_address] = value
                 except Exception as e:
                     raise ValueError(f"Ошибка при обработке ячейки {cell_address}: {e}")
 
+    def update_with_blocks(self, data: dict) -> None:
+        if not self.workbook:
+            raise ValueError("Excel файл не загружен.")
+
+        original_workbook = deepcopy(self.workbook)
+
+        blocks = data.get("blocks", [])
+        newpage = data.get("newpage")
+
+        sheet = self.workbook.active
+        original_sheet = original_workbook.active
+
+        if newpage:
+            sheet_counter = 1
+            for block in blocks:
+                if sheet_counter > 1:
+                    new_sheet = self.workbook.copy_worksheet(sheet)
+                    new_sheet.title = f"{sheet.title}_{sheet_counter}"
+                else:
+                    new_sheet = sheet
+
+                new_sheet.delete_rows(1, new_sheet.max_row)
+                self._copy_sheet_content(original_sheet, new_sheet)
+
+                for cell_address, value in block.items():
+                    new_sheet[cell_address] = value
+
+                sheet_counter += 1
+        else:
+            for i, block in enumerate(blocks):
+                num_rows = original_sheet.max_row
+                self._copy_sheet_content(original_sheet, sheet)
+
+                for cell_address, value in block.items():
+                    col_letter = "".join(
+                        [char for char in cell_address if char.isalpha()]
+                    )
+                    row_number = int(
+                        "".join([char for char in cell_address if char.isdigit()])
+                    )
+                    new_cell_address = f"{col_letter}{row_number}"
+                    sheet[new_cell_address] = value
+                if i < len(blocks) - 1:
+                    sheet.insert_rows(1, num_rows + 1)
+
+    def _copy_sheet_content(self, source_sheet, target_sheet):
+        for row in source_sheet.iter_rows():
+            for cell in row:
+                target_cell = target_sheet.cell(row=cell.row, column=cell.column)
+                target_cell.value = cell.value
+                if cell.has_style:
+                    target_cell._style = cell._style
+                if cell.hyperlink:
+                    target_cell._hyperlink = cell.hyperlink
+                if cell.comment:
+                    target_cell.comment = cell.comment
 
     def save_to_bytes(self) -> BytesIO:
         if not self.workbook:
