@@ -5,7 +5,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.cell import MergedCell
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import column_index_from_string, get_column_letter, range_boundaries
-
+from openpyxl.styles.colors import COLOR_INDEX
 from core.services.base import BaseDocumentService
 
 
@@ -68,18 +68,68 @@ class ExcelService(BaseDocumentService):
             base_range = f"A1:{get_column_letter(sheet.max_column)}{sheet.max_row}"
             if range:
                 base_range = range
-            sheet_data = {}
+            sheet_data = {"cells": {}, "merged": []}
+
+            merged_ranges = [str(merge) for merge in sheet.merged_cells.ranges]
+            sheet_data["merged"] = merged_ranges
+
             cells_range = sheet[base_range]
             for row in cells_range:
                 for cell in row:
-                    if cell.value:
+                    if cell.value is not None:
                         cell_letter = get_column_letter(cell.column)
                         cell_address = f"{cell_letter}{cell.row}"
-                        sheet_data[cell_address] = cell.value
-            if sheet_data:
+
+                        cell_format = self._extract_cell_format(cell)
+
+                        sheet_data["cells"][cell_address] = {
+                            "value": cell.value,
+                            "format": cell_format,
+                        }
+
+            if sheet_data["cells"]:
                 data[sheet.title] = sheet_data
 
         return data
+
+    def _extract_cell_format(self, cell):
+        """Извлекает информацию о форматировании из ячейки."""
+        format_dict = {}
+
+        font = cell.font
+        if font:
+            if font.color:
+                color = font.color
+                if color.type == "rgb" and color.rgb:
+                    format_dict["textcolor"] = color.rgb[2:]
+            if font.name:
+                format_dict["fontname"] = font.name
+            if font.size:
+                format_dict["fontsize"] = font.size
+            if font.bold:
+                format_dict["bold"] = font.bold
+            if font.italic:
+                format_dict["italic"] = font.italic
+            if font.underline and font.underline != "none":
+                format_dict["underline"] = True
+            if font.strike:
+                format_dict["strikethrough"] = font.strike
+
+        fill = cell.fill
+        if fill and fill.patternType == "solid":
+            fgColor = fill.fgColor
+            if fgColor:
+                if fgColor.type == "rgb" and fgColor.rgb:
+                    format_dict["fillcolor"] = fgColor.rgb[-6:]
+
+        alignment = cell.alignment
+        if alignment:
+            if alignment.horizontal:
+                format_dict["align"] = alignment.horizontal
+            if alignment.vertical:
+                format_dict["valign"] = alignment.vertical
+
+        return format_dict
 
     def from_json(self, data: dict) -> None:
         if not self.workbook:
@@ -88,25 +138,23 @@ class ExcelService(BaseDocumentService):
         for sheet_name, sheet_data in data.items():
             if sheet_name in self.workbook.sheetnames:
                 sheet = self.workbook[sheet_name]
+                sheet.delete_rows(1, sheet.max_row)
             else:
                 sheet = self.workbook.create_sheet(sheet_name)
 
-            for cell_address, value in sheet_data.items():
-                try:
-                    col_letter = "".join(
-                        [char for char in cell_address if char.isalpha()]
-                    )
-                    row_number = int(
-                        "".join([char for char in cell_address if char.isdigit()])
-                    )
-                    col_idx = column_index_from_string(col_letter)
+            merged_ranges = sheet_data.get("merged", [])
+            for merge_range in merged_ranges:
+                self._merge_cells_with_data(sheet, merge_range)
 
-                    if row_number < 1 or col_idx < 1:
-                        raise ValueError(f"Некорректный адрес ячейки: {cell_address}.")
+            cells_data = sheet_data.get("cells", {})
+            for cell_address, cell_info in cells_data.items():
+                value = cell_info.get("value")
+                format_dict = cell_info.get("format", {})
 
-                    self._write_value_to_cell(sheet, cell_address, value)
-                except Exception as e:
-                    raise ValueError(f"Ошибка при обработке ячейки {cell_address}: {e}")
+                self._write_value_to_cell(sheet, cell_address, value)
+
+                cell = sheet[cell_address]
+                self._apply_formatting(cell, format_dict)
 
     def update_with_blocks(self, data: dict) -> None:
         if not self.workbook:
