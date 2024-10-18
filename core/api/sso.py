@@ -24,7 +24,6 @@ class JWTBearer(HTTPBearer):
 
 async def validate_token(token: str) -> bool:
     url = settings.AUTH_URL + token
-
     async with aiohttp.ClientSession() as session:
         try:
             async with session.get(url, timeout=10) as response:

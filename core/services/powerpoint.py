@@ -1,6 +1,6 @@
-from io import BytesIO
 import json
 import os
+from io import BytesIO
 from itertools import groupby
 
 from pptx import Presentation
@@ -65,8 +65,6 @@ class PowerpointGenerateService(BaseDocumentService):
             self.presentation.save(file_path)
         else:
             raise ValueError("PPTX файл не загружен")
-
-
 
 
 class PowerpointAnalyzeService:
