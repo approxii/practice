@@ -1,119 +1,187 @@
 from io import BytesIO
-
 from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.oxml.table import CT_Tbl
-from docx.oxml.text.paragraph import CT_P
-
+import os
 from core.services.base import BaseDocumentService
 
 
 class WordService(BaseDocumentService):
     def __init__(self):
-        self.document = None
+        self.docx_file = None
 
     def load(self, file) -> None:
-        self.document = Document(file)
+        self.docx_file = Document(file)
+
 
     def update(self, params: dict) -> None:
-        if not self.document:
+        if not self.docx_file:
             raise ValueError("Word файл не загружен.")
+        
+        result_doc = Document()
 
-        # Ваш код для обновления Word-документа
-        def find_bookmarks(element, data):
-            for bookmark in element.findall(
-                ".//w:bookmarkStart", self.document.element.nsmap
-            ):
-                name = bookmark.get(qn("w:name"))
-                if name in data:
-                    parent = bookmark.getparent()
+        #проход по всем элементам(включая таблицы и тд)
+        for index, block in enumerate(params['blocks']):
+            doc, temp_filename = self.copy_to_temp(index)
+            for key, value in block.items():
+                bookmark_found = False
+                if isinstance(value, str):
+                    for element in doc.element.body.iter():
+                        #print(element.tag)
+                        if element.tag == qn('w:bookmarkStart'):  # тег закладок для поиска в списке xml
+                            bookmark_name = element.get(qn('w:name'))
+                            if bookmark_name == key:
+                                self.replace_text(doc, element, value)
+                                bookmark_found = True
+                    if not bookmark_found:
+                        print(f"Закладка {key} в документе не найдена")
+                elif isinstance(value, list):
+                    for table in doc.tables:
+                        for row in table.rows:
+                            for cell in row.cells:
+                                bookmark_element = self.find_bookmark_in_table(cell, key)
+                                if bookmark_element != None:
+                                    cell.text = value[0]
+                                    bookmark_found = True
+                                    start_index = None
+                                    for idx, c in enumerate(row.cells):
+                                        if c.text == cell.text:
+                                            start_index = idx
+                                            break
 
-                    if isinstance(
-                        parent, CT_P
-                    ):  # Проверка, является ли родительский элемент параграфом
-                        if not isinstance(data[name], list):
-                            print(f"Закладка {name} уже находится в параграфе.")
-                            run = OxmlElement("w:r")
-                            t = OxmlElement("w:t")
-                            t.text = data[name]
-                            run.append(t)
-                            parent.append(run)
-                        else:
-                            table = None
-                            for (
-                                ancestor
-                            ) in (
-                                parent.iterancestors()
-                            ):  # Перебор всех предков элемента
-                                if isinstance(
-                                    ancestor, CT_Tbl
-                                ):  # Проверка, является ли элемент таблицей
-                                    table = ancestor
+                                    if start_index is not None:
+                                        for i, val in enumerate(value[1:], start=1):
+                                            if start_index + i < len(row.cells):
+                                                row.cells[start_index + i].text = val
+
                                     break
-                            if table is not None:  # Если таблица найдена
-                                # Находим соответствующий объект Table в документе
-                                for tbl in self.document.tables:
-                                    if tbl._element == table:
-                                        # Удаляем все строки
-                                        for row in tbl.rows[3:]:
-                                            tbl._element.remove(row._element)
-                                        # Добавляем новые строки
-                                        items = data[name]
-                                        # Если элемент является одиночным массивом, оборачиваем его в дополнительный массив
-                                        if not isinstance(items[0], list):
-                                            items = [items]
-                                        for item in items:
-                                            row = tbl.add_row()
-                                            cells = row.cells
-                                            for i in range(len(item)):
-                                                cells[i].text = item[i]
-                                        break
 
-                            else:
-                                print(f"Таблица не найдена для закладки {name}")
+                            if bookmark_found:
+                                break
+                        if bookmark_found:
+                            break
+
+                    if not bookmark_found:
+                        print(f"Закладка '{key}' не найдена в документе.")
                     else:
-                        print(f"Закладка {name} не находится в параграфе.")
-                        new_paragraph = self.document.add_paragraph(data[name])
-                        parent.addnext(new_paragraph._element)
+                        print(f"Закладка '{key}' успешно обработана.")
 
-        # Перебор всех элементов документа
-        for element in self.document.element.body:
-            find_bookmarks(element, params)
+            doc.save(temp_filename)
+            self.add_temp_to_original(result_doc, temp_filename, params, index)
 
-        # Перебор всех колонтитулов документа
-        for section in self.document.sections:
-            find_bookmarks(section.header._element, params)
-            find_bookmarks(section.footer._element, params)
-        # Установка границ для каждой ячейки в таблице
-        for table in self.document.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    # Получение свойств ячейки
-                    tcPr = cell._tc.get_or_add_tcPr()
-                    # Создание элемента границы ячейки
-                    tcBorders = OxmlElement("w:tcBorders")
-                    # Создание и настройка элементов границ
-                    for border in ["top", "left", "bottom", "right"]:
-                        element = OxmlElement(f"w:{border}")
-                        element.set(qn("w:val"), "single")
-                        element.set(qn("w:sz"), "4")
-                        element.set(qn("w:space"), "0")
-                        element.set(qn("w:color"), "auto")
-                        tcBorders.append(element)
-                    # Добавление границ в свойства ячейки
-                    tcPr.append(tcBorders)
+            #удаление временных файлов
+            if os.path.exists(temp_filename):
+                os.remove(temp_filename)
+
+        if params['newpage'] == 'true':
+            last_paragraph = result_doc.paragraphs[-1]
+            p = last_paragraph._element
+            p.getparent().remove(p)
+
+        self.docx_file = result_doc
+
+    def find_bookmark_in_table(self, cell, bookmark_name):
+        for paragraph in cell.paragraphs:
+            for element in paragraph._element.iter():
+                if element.tag == qn('w:bookmarkStart'):
+                    if element.get(qn('w:name')) == bookmark_name:
+                        return element  #возвращаем элемент закладки
+        return None  #если закладка не найдена
+
+    def copy_to_temp(self, index):
+        #функция копирования данных во временные файлы
+        temp_filename = f'temp{index}.docx'
+
+        self.docx_file.save(temp_filename)
+
+        new_doc = Document(temp_filename)
+
+        return new_doc, temp_filename
+
+    def add_temp_to_original(self, original_doc, temp_doc_path, params: dict, index):
+        #функция комбинирования временного файла с результатом
+        temp_doc = Document(temp_doc_path)
+
+        elements_to_copy = list(temp_doc.element.body)
+        paragraph_index = 0
+        table_index = 0
+
+        for element in elements_to_copy:
+            if element.tag.endswith('p'):
+                if paragraph_index < len(temp_doc.paragraphs):
+                    paragraph = temp_doc.paragraphs[paragraph_index]
+                    self.copy_paragraph(paragraph, original_doc)
+                    paragraph_index += 1
+            elif element.tag.endswith('tbl'):
+                if table_index < len(temp_doc.tables):
+                    table = temp_doc.tables[table_index]
+
+                    new_table = original_doc.add_table(rows=len(table.rows), cols=len(table.columns))
+                    new_table.style = table.style
+
+                    for row_index, row in enumerate(table.rows):
+                        for col_index, cell in enumerate(row.cells):
+                            new_table.cell(row_index, col_index).text = cell.text
+
+                            tcPr = new_table.cell(row_index, col_index)._tc.get_or_add_tcPr()
+                            tcBorders = OxmlElement("w:tcBorders")
+                            for border in ["top", "left", "bottom", "right"]:
+                                element = OxmlElement(f"w:{border}")
+                                element.set(qn("w:val"), "single")
+                                element.set(qn("w:sz"), "4")
+                                element.set(qn("w:space"), "0")
+                                element.set(qn("w:color"), "auto")
+                                tcBorders.append(element)
+                            tcPr.append(tcBorders)
+
+                    table_index += 1
+        if params['newpage'] == 'true':
+            original_doc.add_page_break()
+
+    def replace_text(self, doc, bookmark_element, new_text):
+        parent_element = bookmark_element.getparent()
+
+        for sibling in bookmark_element.itersiblings():
+            if sibling.tag == qn('w:r'):
+                text_elements = sibling.findall(qn('w:t'))
+
+                if text_elements:
+                    for child in text_elements:
+                        child.text = new_text  # Замена на новый текст
+                        return
+
+        new_run = OxmlElement('w:r')
+        new_text_element = OxmlElement('w:t')
+        new_text_element.text = new_text
+
+        new_run.append(new_text_element)
+        parent_element.insert(parent_element.index(bookmark_element), new_run)
+        parent_element.remove(bookmark_element)
+
+
+
+    def copy_paragraph(self, paragraph, document):
+        #ункция для копирования абзаца в новый документ
+        new_paragraph = document.add_paragraph()
+        new_paragraph.style = paragraph.style  #стиль абзаца
+        for run in paragraph.runs:
+            new_run = new_paragraph.add_run(run.text)  #текст
+            new_run.bold = run.bold  #жирность
+            new_run.italic = run.italic  #курсив
+            new_run.font.size = run.font.size  #размер шрифта
+            if run.font.color and run.font.color.rgb:
+                new_run.font.color.rgb = run.font.color.rgb  #цвет шрифта(если есть)
 
     def save_to_bytes(self) -> BytesIO:
-        if not self.document:
+        if not self.docx_file:
             raise ValueError("Word файл не загружен.")
         output = BytesIO()
-        self.document.save(output)
+        self.docx_file.save(output)
         output.seek(0)
         return output
 
     def save_to_file(self, file_path: str) -> None:
-        if self.document:
-            self.document.save(file_path)
+        if self.docx_file:
+            self.docx_file.save(file_path)
         else:
             raise ValueError("Word файл не загружен.")
