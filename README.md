@@ -11,7 +11,7 @@
 **Без docker-compose:**
 
 - создать и заполнить .env файл
-- установить зависимоти `pip install -r requirements.txt`
+- установить зависимости `pip install -r requirements.txt`
 - запустить сервер `python start_app.py`
 - посмотреть [Swagger](http://localhost:8000/docs)
 

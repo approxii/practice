@@ -13,6 +13,7 @@ from core.services.powerpoint import \
     PowerpointGenerateService as GenerateService
 
 router = APIRouter(prefix="/powerpoint")
+router.tags = ["powerpoint"]
 
 
 @router.post("/analyze/")
