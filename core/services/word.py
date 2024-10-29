@@ -3,6 +3,7 @@ from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 import os
+import json
 from core.services.base import BaseDocumentService
 
 
@@ -185,3 +186,91 @@ class WordService(BaseDocumentService):
             self.docx_file.save(file_path)
         else:
             raise ValueError("Word файл не загружен.")
+
+    def clean_para_with_bookmark(self, params: dict) -> None:
+        if not self.docx_file:
+            raise ValueError("Word файл не загружен.")
+
+        bookmark_id = 0
+        #doc = Document(self.docx_file)
+        if 'bookmarks' in params and isinstance(params['bookmarks'], list):
+            for bookmark in params['bookmarks']:
+                if isinstance(bookmark, dict):
+                    for text_to_remove, key in bookmark.items():
+                        self.process_doc(text_to_remove, key, self.docx_file, bookmark_id)
+        #doc.save('test.docx')
+
+    def process_doc(self, text_to_remove, key, doc, bookmark_id):
+        for para in doc.paragraphs:
+            if text_to_remove in para.text:
+                para.text = para.text.replace(text_to_remove, '')
+                self.add_bookmark(para, key, bookmark_id)
+                bookmark_id += 1
+
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for para in cell.paragraphs:
+                        if text_to_remove in para.text:
+                            para.text = para.text.replace(text_to_remove, '')
+                            self.add_bookmark(para, key, bookmark_id)
+                            bookmark_id += 1
+
+    def add_bookmark(self, para, key, bookmark_id):
+        bookmark_start = OxmlElement('w:bookmarkStart')
+        bookmark_start.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}id', str(bookmark_id))
+        bookmark_start.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}name', key)
+
+        bookmark_end = OxmlElement('w:bookmarkEnd')
+        bookmark_end.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}id', str(bookmark_id))
+
+        run = para.add_run()
+        run._element.append(bookmark_start)
+        run._element.append(bookmark_end)
+
+    def extract_bookmarks(self) -> dict:
+        #doc = Document(self.docx_file) #инициализируем документ
+        #data = {}
+        template = {}
+        #проход по всем элементам(включая таблицы и тд)
+        for element in self.docx_file.element.body.iter():
+            if element.tag == qn('w:bookmarkStart'): #тег закладок для поиска в xml
+                bookmark_name = element.get(qn('w:name'))
+                if bookmark_name and bookmark_name != "_GoBack":
+                    text = self.get_text_from_bookmarks(self.docx_file, element)
+                    template[bookmark_name] = text
+
+        output_data = {
+            "blocks": [template],
+            "newpage": "false"  # Список всех шаблонов с массивами
+        }
+        #self.save_to_json(output_data, json_file)
+        #json.dump(output_data, data, ensure_ascii=False, indent=4)
+        return output_data
+
+    #получаем текст с закладок
+    def get_text_from_bookmarks(self, doc, bookmark_start):
+        bookmark_text = []
+        inside_bookmark = False
+        start_id = bookmark_start.get(qn('w:id'))
+
+        for element in doc.element.body.iter():
+            #начало закладки
+            if element.tag == qn('w:bookmarkStart') and element.get(qn('w:id')) == start_id:
+                inside_bookmark = True
+
+            #собираем текст между началом и концом закладки
+            if inside_bookmark and element.tag == qn('w:t'):
+                bookmark_text.append(element.text)
+
+            #конец закладки
+            if element.tag == qn('w:bookmarkEnd') and element.get(qn('w:id')) == start_id:
+                #брейкаем после конца закладки
+                break
+
+        return ' '.join(bookmark_text).strip()
+
+    #сохраняем в json
+    #def save_to_json(self, data, json_file):
+        #with open(json_file, 'w', encoding='utf-8') as f:
+            #json.dump(data, f, ensure_ascii=False, indent=4)
