@@ -165,6 +165,7 @@ class WordService(BaseDocumentService):
         #ункция для копирования абзаца в новый документ
         new_paragraph = document.add_paragraph()
         new_paragraph.style = paragraph.style  #стиль абзаца
+        new_paragraph.style.paragraph_format.line_spacing = 1.5
         for run in paragraph.runs:
             new_run = new_paragraph.add_run(run.text)  #текст
             new_run.bold = run.bold  #жирность
@@ -192,13 +193,11 @@ class WordService(BaseDocumentService):
             raise ValueError("Word файл не загружен.")
 
         bookmark_id = 0
-        #doc = Document(self.docx_file)
         if 'bookmarks' in params and isinstance(params['bookmarks'], list):
             for bookmark in params['bookmarks']:
                 if isinstance(bookmark, dict):
                     for text_to_remove, key in bookmark.items():
                         self.process_doc(text_to_remove, key, self.docx_file, bookmark_id)
-        #doc.save('test.docx')
 
     def process_doc(self, text_to_remove, key, doc, bookmark_id):
         for para in doc.paragraphs:
@@ -229,8 +228,6 @@ class WordService(BaseDocumentService):
         run._element.append(bookmark_end)
 
     def extract_bookmarks(self) -> dict:
-        #doc = Document(self.docx_file) #инициализируем документ
-        #data = {}
         template = {}
         #проход по всем элементам(включая таблицы и тд)
         for element in self.docx_file.element.body.iter():
@@ -244,8 +241,6 @@ class WordService(BaseDocumentService):
             "blocks": [template],
             "newpage": "false"  # Список всех шаблонов с массивами
         }
-        #self.save_to_json(output_data, json_file)
-        #json.dump(output_data, data, ensure_ascii=False, indent=4)
         return output_data
 
     #получаем текст с закладок
@@ -269,8 +264,3 @@ class WordService(BaseDocumentService):
                 break
 
         return ' '.join(bookmark_text).strip()
-
-    #сохраняем в json
-    #def save_to_json(self, data, json_file):
-        #with open(json_file, 'w', encoding='utf-8') as f:
-            #json.dump(data, f, ensure_ascii=False, indent=4)
