@@ -1,3 +1,4 @@
+from copy import deepcopy
 from io import BytesIO
 from docx import Document
 from docx.oxml import OxmlElement
@@ -92,11 +93,8 @@ class WordService(BaseDocumentService):
     def copy_to_temp(self, index):
         #функция копирования данных во временные файлы
         temp_filename = f'temp{index}.docx'
-
         self.docx_file.save(temp_filename)
-
         new_doc = Document(temp_filename)
-
         return new_doc, temp_filename
 
     def add_temp_to_original(self, original_doc, temp_doc_path, params: dict, index):
@@ -141,20 +139,22 @@ class WordService(BaseDocumentService):
 
     def replace_text(self, doc, bookmark_element, new_text):
         parent_element = bookmark_element.getparent()
-
         for sibling in bookmark_element.itersiblings():
             if sibling.tag == qn('w:r'):
                 text_elements = sibling.findall(qn('w:t'))
-
                 if text_elements:
-                    for child in text_elements:
-                        child.text = new_text  # Замена на новый текст
-                        return
+                    new_run = deepcopy(sibling)
+                    for text_elem in new_run.findall(qn('w:t')):
+                        text_elem.text = new_text
+
+                    parent_element.insert(parent_element.index(sibling), new_run)
+                    parent_element.remove(sibling)
+                    parent_element.remove(bookmark_element)
+                    return
 
         new_run = OxmlElement('w:r')
         new_text_element = OxmlElement('w:t')
         new_text_element.text = new_text
-
         new_run.append(new_text_element)
         parent_element.insert(parent_element.index(bookmark_element), new_run)
         parent_element.remove(bookmark_element)
