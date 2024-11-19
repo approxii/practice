@@ -73,3 +73,42 @@ async def get_bookmarks(
         return service.extract_bookmarks()
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+@router.post("/get_bookmarks_with_formatting")
+async def get_bookmarks_with_formatting(
+        file: UploadFile = File(...),
+        service: Service = Depends(get_service)
+):
+    """
+        Принимает документ в теле запроса, возвращает словарь в Response body
+        """
+    try:
+        contents = await file.read()
+        service.load(BytesIO(contents))
+        return service.parse_with_formatting()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+@router.post("/generate_with_formatting")
+async def generate_with_formatting(
+    file: UploadFile = File(...),
+    dictionary: Dict[str, Any] = Depends(DataConverter()),
+    service: Service = Depends(get_service),
+):
+    """
+    Принимает документ и словарь в теле запроса, возвращает новый документ.
+    """
+    contents = await file.read()
+    service.load(BytesIO(contents))
+    service.update_with_formatting(dictionary)
+    new_file = service.save_to_bytes()
+    filename = quote(file.filename)
+
+    headers = {
+        "Content-Disposition": f"attachment; filename*=utf-8''{filename}",
+    }
+    media_type = (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
+    return Response(content=new_file.getvalue(), headers=headers, media_type=media_type)
