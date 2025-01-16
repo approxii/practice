@@ -57,7 +57,7 @@
                 "format": {
                   "fontname": "Times New Roman",
                   "fontsize": 14,
-                  "fillcolor": yellow,
+                  "fillcolor": "yellow",
                   "textcolor": null,
                   "bold": true,
                   "italic": true,
