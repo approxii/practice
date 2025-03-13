@@ -6,7 +6,14 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 import os
 from docx.shared import Pt, RGBColor
+from fastapi import UploadFile
+
 from core.services.base import BaseDocumentService
+import docx
+import markdown
+import html
+from bs4 import BeautifulSoup
+from docx import Document
 
 
 class WordService(BaseDocumentService):
@@ -45,13 +52,11 @@ class WordService(BaseDocumentService):
                                 if bookmark_element != None:
                                     print(f"мы сейчас на ключе {key}")
                                     for paragraph in cell.paragraphs:
-                                        print("вошли в параграф")
                                         if paragraph.runs:
                                             for run in paragraph.runs:
-                                                print("вошли в ран")
                                                 font = run.font
                                                 run.text = value[0]
-                                                print(f"вставка в {key} проихошла успешно")
+                                                print(f"вставка в {key} произошла успешно")
                                                 run.font.bold = font.bold
                                                 run.font.italic = font.italic
                                                 run.font.underline = font.underline
@@ -75,7 +80,7 @@ class WordService(BaseDocumentService):
                                             run = paragraph.add_run()
                                             font = run.font
                                             run.text = value[0]
-                                            print(f"вставка в {key} проихошла успешно")
+                                            print(f"вставка в {key} произошла успешно")
                                             run.font.bold = font.bold
                                             run.font.italic = font.italic
                                             run.font.underline = font.underline
@@ -139,7 +144,6 @@ class WordService(BaseDocumentService):
         paragraph_index = 0
         table_index = 0
 
-        # Проходим по всем элементам временного документа
         for element in elements_to_copy:
             # Если элемент — это параграф
             if element.tag.endswith('p'):
@@ -708,7 +712,6 @@ class WordService(BaseDocumentService):
             if 'strikethrough' in formatting:
                 run.font.strike = formatting['strikethrough']
 
-            # Применяем выравнивание
             if 'align' in formatting:
                 if formatting['align'] == 'center':
                     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -730,3 +733,110 @@ class WordService(BaseDocumentService):
             return tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
         except ValueError:
             raise ValueError(f"Некорректный формат hex цвета: {hex_color}")
+
+
+    def md_to_word(self, md_file: bytes) -> None:
+        md_content = md_file.decode("utf-8")
+
+        html_content = markdown.markdown(md_content)
+        doc = Document()
+        soup = BeautifulSoup(html_content, "html.parser")
+
+        for element in soup.contents:
+            self.process_element(doc, element)
+
+        self.docx_file = doc
+
+
+    def process_element(self, doc, element, list_style=None):
+        html_to_docx_styles = {
+            "h1": "Heading 1",
+            "h2": "Heading 2",
+            "h3": "Heading 3",
+            "h4": "Heading 4",
+            "blockquote": "Quote",
+        }
+        if element.name in html_to_docx_styles:
+            self.add_formatted_paragraph(doc, element, style=html_to_docx_styles[element.name])
+        elif element.name == "p":
+            self.add_formatted_paragraph(doc, element)
+            if element.find("img"):
+                self.add_image(doc, element.find("img"))
+        elif element.name == "ul":
+            self.process_list(doc, element, "List Bullet", is_ordered=False)
+        elif element.name == "ol":
+            self.process_list(doc, element, "List Number", is_ordered=True)
+        elif element.name == "li":
+            self.add_list_item(doc, element, list_style)
+        elif element.name == "blockquote":
+            self.add_quote(doc, element)
+        elif element.name == "img":
+            self.add_image(doc, element)
+
+    def process_list(self, doc, element, list_style, is_ordered):
+        if is_ordered:
+            for li in element.find_all("li"):
+                self.process_element(doc, li, list_style="List Number")
+        else:
+            for li in element.find_all("li"):
+                self.process_element(doc, li, list_style="List Bullet")
+
+    def add_list_item(self, doc, element, list_style):
+        paragraph = doc.add_paragraph(style=list_style)
+
+        if element.find("p"):
+            for p in element.find_all("p"):
+                self.process_inline_formatting(p, paragraph)
+        else:
+            self.process_inline_formatting(element, paragraph)
+
+    def add_formatted_paragraph(self, doc, element, style=None):
+        paragraph = doc.add_paragraph(style=style)
+        self.process_inline_formatting(element, paragraph)
+
+    def process_inline_formatting(self, element, paragraph):
+        for content in element.contents:
+            if isinstance(content, str):
+                paragraph.add_run(html.unescape(content))
+            elif content.name == "strong":
+                run = paragraph.add_run(html.unescape(content.get_text()))
+                run.bold = True
+            elif content.name == "em":
+                run = paragraph.add_run(html.unescape(content.get_text()))
+                run.italic = True
+            elif content.name == "a":
+                self.add_hyperlink(paragraph, content.get_text(), content["href"])
+            else:
+                self.process_inline_formatting(content, paragraph)
+
+    def add_hyperlink(self, paragraph, text, url):
+        part = paragraph.part
+        r_id = part.relate_to(url, docx.opc.constants.RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
+
+        hyperlink = docx.oxml.shared.OxmlElement('w:hyperlink')
+        hyperlink.set(docx.oxml.shared.qn('r:id'), r_id)
+
+        new_run = docx.text.run.Run(docx.oxml.shared.OxmlElement('w:r'), paragraph)
+        new_run.text = text
+        new_run.style = self.get_or_create_hyperlink_style(part.document)
+
+        hyperlink.append(new_run._element)
+        paragraph._p.append(hyperlink)
+
+    def get_or_create_hyperlink_style(self, d):
+        if "Hyperlink" not in d.styles:
+            hs = d.styles.add_style("Hyperlink", docx.enum.style.WD_STYLE_TYPE.CHARACTER, True)
+            hs.font.color.rgb = docx.shared.RGBColor(0x05, 0x63, 0xC1)
+            hs.font.underline = True
+        return "Hyperlink"
+
+    def add_quote(self, doc, element):
+        paragraph = doc.add_paragraph(style="Quote")
+        self.process_inline_formatting(element, paragraph)
+
+    def add_image(self, doc, img_element):
+        image_name = img_element.get("alt", "Изображение")
+        image_url = img_element.get("src")
+        paragraph = doc.add_paragraph()
+        paragraph.add_run(f"{image_name}: {image_url}")
+        paragraph.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.LEFT

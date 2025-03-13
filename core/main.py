@@ -7,9 +7,8 @@ from core.api import router
 from core.settings.app_config import settings
 
 app: FastAPI = FastAPI(
-    title="Micorosoft documets generate/analyze", root_path=settings.ROOT_PATH
+    title="Microsoft documets generate/analyze", root_path=settings.ROOT_PATH
 )
-
 
 app.include_router(router)
 
