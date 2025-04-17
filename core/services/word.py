@@ -1,3 +1,4 @@
+import re
 from copy import deepcopy
 from io import BytesIO
 from docx import Document
@@ -734,18 +735,91 @@ class WordService(BaseDocumentService):
         except ValueError:
             raise ValueError(f"Некорректный формат hex цвета: {hex_color}")
 
-
     def md_to_word(self, md_file: bytes) -> None:
         md_content = md_file.decode("utf-8")
+        lines = md_content.splitlines()
 
-        html_content = markdown.markdown(md_content)
         doc = Document()
-        soup = BeautifulSoup(html_content, "html.parser")
 
+        buffer = []
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+
+            if '|' in line and i + 1 < len(lines) and set(lines[i + 1].strip()) <= {'-', '|', ' '}:
+                if buffer:
+                    self._process_md_block(doc, '\n'.join(buffer))
+                    buffer = []
+
+                table_lines = [line, lines[i + 1]]
+                i += 2
+                while i < len(lines) and '|' in lines[i]:
+                    table_lines.append(lines[i])
+                    i += 1
+
+                headers, rows = self.parse_md_table(table_lines)
+                table = doc.add_table(rows=1 + len(rows), cols=len(headers))
+                table.style = 'Table Grid'
+
+                for col_idx, header in enumerate(headers):
+                    table.cell(0, col_idx).text = header
+
+                for row_idx, row in enumerate(rows, start=1):
+                    for col_idx, cell in enumerate(row):
+                        table.cell(row_idx, col_idx).text = cell
+
+                doc.add_paragraph('')
+            else:
+                buffer.append(line)
+                i += 1
+
+        if buffer:
+            self._process_md_block(doc, '\n'.join(buffer))
+
+        self.docx_file = doc
+
+    def _process_md_block(self, doc, md_text: str):
+        html = markdown.markdown(md_text)
+        soup = BeautifulSoup(html, "html.parser")
         for element in soup.contents:
             self.process_element(doc, element)
 
-        self.docx_file = doc
+    def remove_md_tables(self, lines):
+        result = []
+        skip = False
+        for line in lines:
+            if '|' in line and not skip:
+                skip = True
+                continue
+            if skip and ('|' in line or set(line.strip()) <= {'-', '|', ' '}):
+                continue
+            skip = False
+            result.append(line)
+        return result
+
+    def extract_md_tables(self, md_lines):
+        tables = []
+        i = 0
+        while i < len(md_lines):
+            if '|' in md_lines[i]:
+                table_lines = []
+                while i < len(md_lines) and '|' in md_lines[i]:
+                    table_lines.append(md_lines[i])
+                    i += 1
+                if len(table_lines) >= 2 and re.match(r'^\s*\|?[\s:-]+\|', table_lines[1]):
+                    tables.append(table_lines)
+            else:
+                i += 1
+        return tables
+
+    def parse_md_table(self, table_lines):
+        headers = [h.strip() for h in table_lines[0].split('|') if h.strip()]
+        rows = []
+        for line in table_lines[2:]:
+            cols = [c.strip() for c in line.split('|') if c.strip()]
+            if cols:
+                rows.append(cols)
+        return headers, rows
 
 
     def process_element(self, doc, element, list_style=None):
