@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>PowerPoint VBA Runner</title>
+<style>
+body { font-family: Arial,sans-serif; text-align:center; max-width:900px; margin:auto; background:#fafafa; }
+textarea { width:100%; height:120px; font-family: Consolas, monospace; font-size:14px; padding:10px; }
+button { padding:10px 20px; margin:10px 5px; cursor:pointer; }
+img { max-width:90%; border:1px solid #ccc; border-radius:8px; margin:10px 0; box-shadow:0 2px 10px rgba(0,0,0,0.1); }
+a.download-link { display:inline-block; margin-top:15px; padding:10px 15px; background:#4caf50; color:white; text-decoration:none; border-radius:5px; }
+a.download-link:hover { background:#45a049; }
+</style>
+</head>
+<body>
+{% if not slides %}
+<h2>💻 Введите запрос для презентации</h2>
+<form method="post">
+    <textarea name="user_text" placeholder="Описание слайдов..."></textarea><br>
+    <button type="submit">▶ Создать презентацию</button>
+</form>
+{% else %}
+<h2>🖼 Презентация готова</h2>
+<div>
+    <img id="slideImage" src="{{ slides[0] }}" alt="Слайд 1">
+    <p id="slideCounter">Слайд 1 из {{ slides|length }}</p>
+</div>
+<div>
+    <button onclick="prevSlide()">⬅ Предыдущий</button>
+    <button onclick="nextSlide()">Следующий ➡</button>
+</div>
+<a class="download-link" href="{{ download_url }}" target="_blank">📥 Скачать PPTM</a>
+
+<script>
+const slides = {{ slides|tojson }};
+let current = 0;
+const slideImage = document.getElementById('slideImage');
+const slideCounter = document.getElementById('slideCounter');
+
+function updateSlide() {
+    slideImage.src = slides[current];
+    slideCounter.innerText = `Слайд ${current+1} из ${slides.length}`;
+}
+
+function prevSlide() { if(current>0){ current--; updateSlide(); } }
+function nextSlide() { if(current<slides.length-1){ current++; updateSlide(); } }
+</script>
+{% endif %}
+</body>
+</html>
